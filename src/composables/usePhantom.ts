@@ -567,10 +567,22 @@ export function usePhantom(ctx: PhantomMessengerCtx) {
           (item: PhantomIncoming) => item.sender?.prekeyFp === senderFp,
         );
         if (alreadyPending) return;
+        const pendingId = globalThis.crypto.randomUUID();
         state.pendingIncoming.push({
-          id: globalThis.crypto.randomUUID(),
+          id: pendingId,
           ...(inner as unknown as PhantomIncoming),
         });
+        // In "all" mode, automatically complete the authenticated Phantom
+        // handshake. acceptIncoming() verifies the sender's signed prekey,
+        // creates the room key, and delivers it only inside the recipient's
+        // ML-KEM encrypted + signed welcome envelope. Never generate a local
+        // room key on the receiving side: it must import the key from welcome.
+        if (state.acceptUnknown === "all") {
+          void acceptIncoming(pendingId).catch(() => {
+            // Keep the request pending so the user can retry manually if a
+            // transient network/account error prevents automatic acceptance.
+          });
+        }
       } else if (inner.kind === "welcome") {
         await handleWelcome(inner);
       }
